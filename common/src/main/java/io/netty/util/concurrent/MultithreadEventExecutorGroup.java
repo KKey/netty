@@ -60,10 +60,13 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
 
     /**
      * Create a new instance.
-     *
+     * KKEY 构造新线程对象，并初始化线程
      * @param nThreads          the number of threads that will be used by this instance.
+     *                          线程池线程数量
      * @param executor          the Executor to use, or {@code null} if the default should be used.
+     *                          线程池，默认是：new ThreadPerTaskExecutor(threadFactory)
      * @param chooserFactory    the {@link EventExecutorChooserFactory} to use.
+     *                          指定线程池的线程选择策略工厂，默认：new DefaultEventExecutorChooserFactory()
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
@@ -128,6 +131,9 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         readonlyChildren = Collections.unmodifiableSet(childrenSet);
     }
 
+    /**
+     * 线程工厂
+     */
     protected ThreadFactory newDefaultThreadFactory() {
         return new DefaultThreadFactory(getClass());
     }

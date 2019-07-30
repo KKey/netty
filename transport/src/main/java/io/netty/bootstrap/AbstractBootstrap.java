@@ -26,6 +26,9 @@ import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
+import io.netty.channel.socket.ServerSocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.GlobalEventExecutor;
@@ -52,9 +55,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     volatile EventLoopGroup group;
     @SuppressWarnings("deprecation")
+    /**
+     * channel工厂
+     * KKEY 例如客户端的{@link NioSocketChannel}，通过该类型channel对象向服务端发送connect请求
+     * KKEY 例如服务端的{@link NioServerSocketChannel}，监听接收客户端的connect，并创建新SocketChannel
+     */
     private volatile ChannelFactory<? extends C> channelFactory;
-    private volatile SocketAddress localAddress;
-    private final Map<ChannelOption<?>, Object> options = new LinkedHashMap<ChannelOption<?>, Object>();
+    private volatile SocketAddress localAddress;//本地网络地址
+    private final Map<ChannelOption<?>, Object> options = new LinkedHashMap<ChannelOption<?>, Object>();//一般指TCP CHANNEL 参数
     private final Map<AttributeKey<?>, Object> attrs = new LinkedHashMap<AttributeKey<?>, Object>();
     private volatile ChannelHandler handler;
 
@@ -97,6 +105,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * The {@link Class} which is used to create {@link Channel} instances from.
      * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
      * {@link Channel} implementation has no no-args constructor.
+     * KKEY 指定channel类型，channel工厂反射产生的channel对象就是这个指定的类型，clazz.getConstructor().newInstance();
+     * KKEY 例如客户端的{@link NioSocketChannel}，通过该类型channel对象向服务端发送connect请求
+     * KKEY 例如服务端的{@link NioServerSocketChannel}，监听接收客户端的connect，并创建新SocketChannel
      */
     public B channel(Class<? extends C> channelClass) {
         return channelFactory(new ReflectiveChannelFactory<C>(
@@ -162,6 +173,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     /**
      * Allow to specify a {@link ChannelOption} which is used for the {@link Channel} instances once they got
      * created. Use a value of {@code null} to remove a previous set {@link ChannelOption}.
+     * KKEY 设置TCP channel的参数
      */
     public <T> B option(ChannelOption<T> option, T value) {
         ObjectUtil.checkNotNull(option, "option");
@@ -240,6 +252,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     /**
      * Create a new {@link Channel} and bind it.
+     * KKEY 绑定并监听指定端口
      */
     public ChannelFuture bind(int inetPort) {
         return bind(new InetSocketAddress(inetPort));
@@ -267,6 +280,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         return doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
     }
 
+    /**
+     * KKEY NOTE 绑定指定本地地址并创建channel
+     */
     private ChannelFuture doBind(final SocketAddress localAddress) {
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
@@ -303,9 +319,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
     }
 
+    /**
+     * KKEY 创建channel
+     *
+     */
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            //KKEY 创建channel 服务端一般是NioServerSocketChannel.class.getConstructor().newInstance();
             channel = channelFactory.newChannel();
             init(channel);
         } catch (Throwable t) {
@@ -362,6 +383,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     /**
      * the {@link ChannelHandler} to use for serving the requests.
+     * KKEY 设置{@link ServerSocketChannel} channel的handler处理器，一般用的是NioServerSocketChannel或者EpollServerSocketChannel
      */
     public B handler(ChannelHandler handler) {
         this.handler = ObjectUtil.checkNotNull(handler, "handler");
