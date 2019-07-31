@@ -68,9 +68,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      *        the parent of this channel. {@code null} if there's no parent.
      */
     protected AbstractChannel(Channel parent) {
-        this.parent = parent;
-        id = newId();
-        unsafe = newUnsafe();
+        this.parent = parent;//当server创建的ServerSocketChannel时，parent为null
+        id = newId();//创建channel ID
+        unsafe = newUnsafe();//KKEY 实际为：NioMessageUnsafe
+        //KKEY 创建ServerSocketChannel的pipeline，每个channel都有一个独立的pipeline，用于管理handler双向链，以及IO事件的流转
         pipeline = newChannelPipeline();
     }
 
@@ -465,6 +466,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             AbstractChannel.this.eventLoop = eventLoop;
 
+            //KKEY 判断当前执行线程是不是等于要注册的线程，如果是则直接register0，不是则封装成task提给需要注册线程的任务队列
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
@@ -494,16 +496,27 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                /**
+                 * AbstractNioChannel.doRegister();
+                 * KKEY 将channel注册到selector上
+                 */
                 doRegister();
                 neverRegistered = false;
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+                /**
+                 * 将ServerBootstrapAcceptor添加到pipeline的handler链表中，
+                 * 用于work线程注册新创建channel时将定义的handler添加到新创建channel的pipeline的handler链表中
+                 * 然后将当前触发的ChannelInitializer从链表中移除，pipeline中的结构基本如下：
+                 * head <-> handler... <-> ServerBootstrapAcceptor <-> tail
+                 */
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 safeSetSuccess(promise);
-                pipeline.fireChannelRegistered();
+                pipeline.fireChannelRegistered();//pipeline中触发registered事件
+
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) {

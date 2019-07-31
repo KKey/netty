@@ -131,6 +131,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private int cancelledKeys;
     private boolean needsToSelectAgain;
 
+    /**
+     * 构建NioEventLoop对象
+     * @param parent parent，所属group，是理解成线程池，是线程池中的一个
+     * @param executor 执行器
+     * @param selectorProvider selector
+     * @param strategy 选择策略，可以理解成从线程池中选择一个线程的策略
+     * @param rejectedExecutionHandler 拒绝策略
+     * @param queueFactory null
+     */
     NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
                  SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
                  EventLoopTaskQueueFactory queueFactory) {

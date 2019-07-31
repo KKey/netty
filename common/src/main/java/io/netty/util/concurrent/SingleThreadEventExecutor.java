@@ -763,8 +763,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
 
         boolean inEventLoop = inEventLoop();
-        addTask(task);
+        addTask(task);//往任务队列taskQueue中提交任务
         if (!inEventLoop) {
+            //KKEY 如果执行线程不是注册线程，注册线程还没启动则需要启动
             startThread();
             if (isShutdown()) {
                 boolean reject = false;
@@ -870,10 +871,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void startThread() {
         if (state == ST_NOT_STARTED) {
+            //还没有启动的状态，原子修改状态
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
-                    doStartThread();
+                    doStartThread();//执行线程启动
                     success = true;
                 } finally {
                     if (!success) {
@@ -915,7 +917,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    //KKEY **********************启动****************************
                     SingleThreadEventExecutor.this.run();
+                    //KKEY **************************************************
                     success = true;
                 } catch (Throwable t) {
                     logger.warn("Unexpected exception from an event executor: ", t);

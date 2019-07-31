@@ -88,7 +88,14 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link ServerSocketChannel}.
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
+        //KKEY NioServerSocketChannel 持有新创建的 ServerSocketChannel，设置channel的监听位为ACCEPT事件
+        //KKEY 此时ServerSocketChannel没有parent
         super(null, channel, SelectionKey.OP_ACCEPT);
+
+        /*
+        KKEY ServerSocketChannel 只是个channel对象，还没有实际创建ServerSocket，调用socket()则实际创建了socket；还没有绑定网络地址和端口
+        KKEY 保存ServerSocket，以及设置AdaptiveRecvByteBufAllocator：容量动态调整的接收缓冲区分配器
+         */
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());
     }
 

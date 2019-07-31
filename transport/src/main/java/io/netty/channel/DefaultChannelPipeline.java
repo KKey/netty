@@ -94,9 +94,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         succeededFuture = new SucceededChannelFuture(channel, null);
         voidPromise =  new VoidChannelPromise(channel, true);
 
+        //初始头尾节点
         tail = new TailContext(this);
         head = new HeadContext(this);
 
+        //初始时头尾相接
         head.next = tail;
         tail.prev = head;
     }

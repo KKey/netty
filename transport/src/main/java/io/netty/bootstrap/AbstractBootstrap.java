@@ -284,6 +284,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * KKEY NOTE 绑定指定本地地址并创建channel
      */
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        //构造channel、绑定线程和selector、初始化pipeline等等
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
@@ -326,9 +327,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
-            //KKEY 创建channel 服务端一般是NioServerSocketChannel.class.getConstructor().newInstance();
+            //KKEY 创建channel
+            //KKEY 服务端一般是NioServerSocketChannel.class.getConstructor().newInstance();构造unsafe/pipeline/创建ServerSocket等
             channel = channelFactory.newChannel();
-            init(channel);
+            init(channel);//初始化channel，例如设置option/attr，往pipeline添加初始handler等
         } catch (Throwable t) {
             if (channel != null) {
                 // channel can be null if newChannel crashed (eg SocketException("too many open files"))
@@ -340,6 +342,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
+        /*
+        KKEY config().group()获取的boss线程池，请参见：【super.group(parentGroup);//KKEY 看到没，常说的boss线程池是传给父类】
+        将channel注册到boss线程池中的一个线程，以及selector上，初始化pipeline结构等等。。。
+         */
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

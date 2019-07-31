@@ -84,6 +84,7 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
 
     @Override
     public ChannelFuture register(Channel channel) {
+        //KKEY next() ==>> 从线程池中选取一个线程，将channel注册到这个线程上SingleThreadEventLoop。
         return next().register(channel);
     }
 

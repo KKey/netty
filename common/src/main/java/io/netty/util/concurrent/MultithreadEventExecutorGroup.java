@@ -60,7 +60,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
 
     /**
      * Create a new instance.
-     * KKEY 构造新线程对象，并初始化线程
+     * KKEY TODO NOTE FIXME 构造新线程对象，并初始化线程
      * @param nThreads          the number of threads that will be used by this instance.
      *                          线程池线程数量
      * @param executor          the Executor to use, or {@code null} if the default should be used.
@@ -79,12 +79,12 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
-        children = new EventExecutor[nThreads];
+        children = new EventExecutor[nThreads];//构建线程池
 
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
-                children[i] = newChild(executor, args);
+                children[i] = newChild(executor, args);//创建线程
                 success = true;
             } catch (Exception e) {
                 // TODO: Think about if this is a good exception type
@@ -111,7 +111,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
-        chooser = chooserFactory.newChooser(children);
+        chooser = chooserFactory.newChooser(children);//线程选择策略基于当前线程池进行选择
 
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override
@@ -140,6 +140,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
 
     @Override
     public EventExecutor next() {
+        //根据选择器，从线程池中选择一个线程
         return chooser.next();
     }
 
