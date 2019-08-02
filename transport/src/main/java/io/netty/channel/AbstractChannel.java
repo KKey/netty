@@ -561,7 +561,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             boolean wasActive = isActive();
             try {
-                doBind(localAddress);
+                doBind(localAddress);//kkey bind 操作，jdk socket的bind操作，例如服务端的ServerSocketChannelImpl
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
                 closeIfClosed();
@@ -569,6 +569,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             if (!wasActive && isActive()) {
+                //绑定成功之后再pipeline中触发channel active事件
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {

@@ -84,7 +84,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
-                children[i] = newChild(executor, args);//创建线程
+                children[i] = newChild(executor, args);//KKEY 创建线程对象，例如 EventLoop
                 success = true;
             } catch (Exception e) {
                 // TODO: Think about if this is a good exception type

@@ -291,6 +291,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return regFuture;
         }
 
+        //如果初始和注册操作已经完成，则直接绑定则可，如果没完成，则在完成时listener处理 KKEY 核心doBind0
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
@@ -379,6 +380,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             @Override
             public void run() {
                 if (regFuture.isSuccess()) {
+                    //KKEY channel的bind操作，最终调用的是pipeline的bind，bind事件在pipeline的handler中流转，最终调用的是unsafe.bind
+                    //KKEY 其实就是socket连接的绑定操作
                     channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 } else {
                     promise.setFailure(regFuture.cause());

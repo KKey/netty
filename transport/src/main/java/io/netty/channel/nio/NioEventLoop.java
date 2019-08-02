@@ -132,7 +132,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private boolean needsToSelectAgain;
 
     /**
-     * 构建NioEventLoop对象
+     * KKEY 构建NioEventLoop对象
      * @param parent parent，所属group，是理解成线程池，是线程池中的一个
      * @param executor 执行器
      * @param selectorProvider selector
@@ -447,6 +447,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * KKEY 在第一次往NioEventLoop的execute提交任务的时候，触发run逻辑，一直不停运行；
+     * SingleThreadEventExecutor::doStartThread ==>> SingleThreadEventExecutor.this.run();
+     */
     @Override
     protected void run() {
         for (;;) {
@@ -506,7 +510,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
-                final int ioRatio = this.ioRatio;
+                final int ioRatio = this.ioRatio;//IO和task执行占比比例
                 if (ioRatio == 100) {
                     try {
                         processSelectedKeys();
