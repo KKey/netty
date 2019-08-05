@@ -21,6 +21,13 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+/**
+ * SelectorImpl原来的selectedKeys和publicSelectedKeys数据结构是HashSet,而HashSet的数据结构是数组+链表，
+ * 新的数据结构是由2个数组A、B组成，初始大小是1024，避免了HashSet扩容带来的性能问题。
+ * 除了扩容外，遍历效率也是一个原因，对于需要遍历selectedKeys的全部元素, 数组效率无疑是最高的。
+ * 由于keyset不需要remove，contains，iterator等这些操作，所以可以替换为数组。
+ * 另外，由于原来的keyset也是继承自AbstractSet，这个也是继承自AbstractSet，所以有替换的可能性
+ */
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
     SelectionKey[] keys;

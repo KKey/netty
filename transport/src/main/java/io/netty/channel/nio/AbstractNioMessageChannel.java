@@ -60,6 +60,9 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
         private final List<Object> readBuf = new ArrayList<Object>();
 
         @Override
+        /**
+         * KKEY 连接建立、初始化、注册等
+         */
         public void read() {
             assert eventLoop().inEventLoop();
             final ChannelConfig config = config();
@@ -72,7 +75,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
             try {
                 try {
                     do {
-                        int localRead = doReadMessages(readBuf);
+                        int localRead = doReadMessages(readBuf);//KKEY 将建立的socket channel通过初始化之后添加到list中
                         if (localRead == 0) {
                             break;
                         }
@@ -82,14 +85,17 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                         }
 
                         allocHandle.incMessagesRead(localRead);
-                    } while (allocHandle.continueReading());
+                    } while (allocHandle.continueReading());//KKEY //多个accept时，默认16个一组接受创建连接
                 } catch (Throwable t) {
                     exception = t;
                 }
 
                 int size = readBuf.size();
+                //KKEY 循环处理每个新建立的channel，在parent的pipeline中触发read事件，并带上刚创建的channel
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    //KKEY pipeline这个pipeline是当前 NioServerSocketChannel 的pipeline，内部handler包括 ServerBootstrapAcceptor
+                    // kkey 请参见ServerBootstrap的init(Channel channel)方法，因此要执行ServerBootstrapAcceptor的read事件
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
                 readBuf.clear();

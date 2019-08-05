@@ -43,13 +43,14 @@ public class DefaultSocketChannelConfig extends DefaultChannelConfig
      * Creates a new instance.
      */
     public DefaultSocketChannelConfig(SocketChannel channel, Socket javaSocket) {
-        super(channel);
+        super(channel);//AdaptiveRecvByteBufAllocator等
         if (javaSocket == null) {
             throw new NullPointerException("javaSocket");
         }
         this.javaSocket = javaSocket;
 
         // Enable TCP_NODELAY by default if possible.
+        // netty一般运行在服务器上，不在Android上，canEnableTcpNoDelayByDefault返回true
         if (PlatformDependent.canEnableTcpNoDelayByDefault()) {
             try {
                 setTcpNoDelay(true);

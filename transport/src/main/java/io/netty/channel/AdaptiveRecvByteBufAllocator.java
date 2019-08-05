@@ -31,24 +31,55 @@ import static java.lang.Math.min;
  * number of readable bytes if the read operation was not able to fill a certain
  * amount of the allocated buffer two times consecutively.  Otherwise, it keeps
  * returning the same prediction.
+ * KKEY AdaptiveRecvByteBufAllocator主要用于构建一个最优大小的缓冲区来接收数据。
+ * KKEY 比如，在读事件中就会通过该类来获取一个最优大小的的缓冲区来接收对端发送过来的可读取的数据。
+ * 以下注释参考引用自：https://cloud.tencent.com/developer/article/1152639
+ * RecvByteBufAllocator会根据反馈自动的增加和减少可预测的buffer的大小。
+ * 它会逐渐地增加期望的可读到的字节数如果之前的读循环操作所读取到的字节数据已经完全填充满了分配好的buffer
+ * (也就是，上一次的读循环操作中执行的所有读取操作所累加的读到的字节数，已经大于等于预测分配的buffer的容量大小，
+ * 那么它就会很优雅的自动的去增加可读的字节数量，也就是自动的增加缓冲区的大小 )。
+ * 它也会逐渐的减少期望的可读的字节数如果’连续’两次读循环操作后都没有填充满分配的buffer
  */
 public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufAllocator {
 
-    static final int DEFAULT_MINIMUM = 64;
-    static final int DEFAULT_INITIAL = 1024;
-    static final int DEFAULT_MAXIMUM = 65536;
+    static final int DEFAULT_MINIMUM = 64;// 默认缓冲区的最小容量大小为64
+    static final int DEFAULT_INITIAL = 1024;// 默认缓冲区的容量大小为1024
+    static final int DEFAULT_MAXIMUM = 65536;// 默认缓冲区的最大容量大小为65536
 
+    /*
+        在调整缓冲区大小时，若是增加缓冲区容量，那么增加的索引值。
+        比如，当前缓冲区的大小为SIZE_TABLE[20],若预测下次需要创建的缓冲区需要增加容量大小，
+        则新缓冲区的大小为SIZE_TABLE[20 + INDEX_INCREMENT]，即SIZE_TABLE[24]
+     */
     private static final int INDEX_INCREMENT = 4;
+    /*
+        在调整缓冲区大小时，若是减少缓冲区容量，那么减少的索引值。
+        比如，当前缓冲区的大小为SIZE_TABLE[20],若预测下次需要创建的缓冲区需要减小容量大小，
+        则新缓冲区的大小为SIZE_TABLE[20 - INDEX_DECREMENT]，即SIZE_TABLE[19]
+     */
     private static final int INDEX_DECREMENT = 1;
 
+    /*
+        用于存储缓冲区容量大小的数组
+        SIZE_TABLE为预定义好的以从小到大的顺序设定的可分配缓冲区的大小值的数组。
+        因为AdaptiveRecvByteBufAllocator作用是可自动适配每次读事件使用的buffer的大小。
+        这样当需要对buffer大小做调整时，只要根据一定逻辑从SIZE_TABLE中取出值，然后根据该值创建新buffer即可。
+     */
     private static final int[] SIZE_TABLE;
+
+    private final int minIndex;// 缓冲区最小容量对应于SIZE_TABLE中的下标位置
+    private final int maxIndex;// 缓冲区最大容量对应于SIZE_TABLE中的下标位置
+    private final int initial;// 缓冲区默认容量大小
 
     static {
         List<Integer> sizeTable = new ArrayList<Integer>();
+
+        //依次往sizeTable添加元素：[16 , (512-16)]之间16的倍数。即，16、32、48...496
         for (int i = 16; i < 512; i += 16) {
             sizeTable.add(i);
         }
 
+        //然后再往sizeTable中添加元素：[512 , 512 * (2^N))，N > 1; 直到数值超过Integer的限制(2^31 - 1)；
         for (int i = 512; i > 0; i <<= 1) {
             sizeTable.add(i);
         }
@@ -65,6 +96,10 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     @Deprecated
     public static final AdaptiveRecvByteBufAllocator DEFAULT = new AdaptiveRecvByteBufAllocator();
 
+    /*
+    因为SIZE_TABLE数组是一个有序数组，因此此处用二分查找法，查找size在SIZE_TABLE中的位置，
+    如果size存在于SIZE_TABLE中，则返回对应的索引值；否则返回向上取接近于size大小的SIZE_TABLE数组元素的索引值。
+     */
     private static int getSizeTableIndex(final int size) {
         for (int low = 0, high = SIZE_TABLE.length - 1;;) {
             if (high < low) {
@@ -121,6 +156,20 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             return nextReceiveBufferSize;
         }
 
+        /*
+        record方法很重要，它就是完成预测下一个缓冲区容量大小的操作。
+        逻辑如下：
+        若发现两次，本次读循环真实读取的字节总数 <= ‘SIZE_TABLE[Math.max(0, index - INDEX_DECREMENT - 1)]’ ，则减少预测的缓冲区容量大小。
+        重新给成员变量index赋值为为‘index - 1’，若‘index - 1’ < minIndex，则index新值为minIndex。
+        根据算出来的新的index索引，给成员变量nextReceiveBufferSize重新赋值'SIZE_TABLE[index]’。
+        最后将decreaseNow置位false，该字段用于表示是否有’连续’的两次真实读取的数据满足可减少容量大小的情况。
+        注意，这里说的‘连续’并不是真的连续发送，而是指满足条件(即，‘actualReadBytes <= SIZE_TABLE[Math.max(0, index - INDEX_DECREMENT - 1)]’)
+        两次的期间没有发生‘actualReadBytes >= nextReceiveBufferSize’的情况。
+        若，本次读循环真实读取的字节总数 >= 预测的缓冲区大小，则进行增加预测的缓冲区容量大小。
+        新的index为‘index + 4’，若‘index + 4’ > maxIndex，则index新值为maxIndex。
+        根据算出来的新的index索引，给成员变量nextReceiveBufferSize重新赋值'SIZE_TABLE[index]’。
+        最后将decreaseNow置位false。
+         */
         private void record(int actualReadBytes) {
             if (actualReadBytes <= SIZE_TABLE[max(0, index - INDEX_DECREMENT - 1)]) {
                 if (decreaseNow) {
@@ -143,10 +192,6 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         }
     }
 
-    private final int minIndex;
-    private final int maxIndex;
-    private final int initial;
-
     /**
      * Creates a new predictor with the default parameters.  With the default
      * parameters, the expected buffer size starts from {@code 1024}, does not
@@ -162,6 +207,9 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
      * @param minimum  the inclusive lower bound of the expected buffer size
      * @param initial  the initial buffer size when no feed back was received
      * @param maximum  the inclusive upper bound of the expected buffer size
+     // 使用指定的参数创建AdaptiveRecvByteBufAllocator对象。
+     // 其中minimum、initial、maximum是正整数。然后通过getSizeTableIndex()方法获取相应容量在SIZE_TABLE中的索引位置。
+     // 并将计算出来的索引赋值给相应的成员变量minIndex、maxIndex。同时保证「SIZE_TABLE[minIndex] >= minimum」以及「SIZE_TABLE[maxIndex] <= maximum」.
      */
     public AdaptiveRecvByteBufAllocator(int minimum, int initial, int maximum) {
         checkPositive(minimum, "minimum");
@@ -171,7 +219,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         if (maximum < initial) {
             throw new IllegalArgumentException("maximum: " + maximum);
         }
-
+        //保留最大、最小和初始大小在SIZE_TABLE的索引位置
         int minIndex = getSizeTableIndex(minimum);
         if (SIZE_TABLE[minIndex] < minimum) {
             this.minIndex = minIndex + 1;

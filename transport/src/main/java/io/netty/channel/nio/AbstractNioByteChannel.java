@@ -63,7 +63,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
      * @param ch                the underlying {@link SelectableChannel} on which it operates
      */
     protected AbstractNioByteChannel(Channel parent, SelectableChannel ch) {
-        super(parent, ch, SelectionKey.OP_READ);
+        super(parent, ch, SelectionKey.OP_READ);//带着READ事件标志
     }
 
     /**
@@ -129,6 +129,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         }
 
         @Override
+        /**
+         * KKEY 数据读取
+         */
         public final void read() {
             final ChannelConfig config = config();
             if (shouldBreakReadReady(config)) {
@@ -136,7 +139,11 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 return;
             }
             final ChannelPipeline pipeline = pipeline();
-            final ByteBufAllocator allocator = config.getAllocator();
+            final ByteBufAllocator allocator = config.getAllocator();//KKEY:这个需要重点分析内存分配器，初始化的时候指定了 ByteBufUtil.DEFAULT_ALLOCATOR;
+            /*
+            初始化的时候指定了，AdaptiveRecvByteBufAllocator，请参见NioSocketChannel的构造函数
+            AdaptiveRecvByteBufAllocator.java::newHandle() ==>> new HandleImpl(minIndex, maxIndex, initial);
+             */
             final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
             allocHandle.reset(config);
 
@@ -144,11 +151,11 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             boolean close = false;
             try {
                 do {
-                    byteBuf = allocHandle.allocate(allocator);
-                    allocHandle.lastBytesRead(doReadBytes(byteBuf));
+                    byteBuf = allocHandle.allocate(allocator);//KKEY:这个需要重点分析 分配器分配byteBuf AdaptiveRecvByteBufAllocator
+                    allocHandle.lastBytesRead(doReadBytes(byteBuf));//从channel读到byteBuf
                     if (allocHandle.lastBytesRead() <= 0) {
                         // nothing was read. release the buffer.
-                        byteBuf.release();
+                        byteBuf.release();//啥都没读到，释放吧
                         byteBuf = null;
                         close = allocHandle.lastBytesRead() < 0;
                         if (close) {
@@ -160,7 +167,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
 
                     allocHandle.incMessagesRead(1);
                     readPending = false;
-                    pipeline.fireChannelRead(byteBuf);
+                    pipeline.fireChannelRead(byteBuf);//读完之后则触发read事件，走业务handler
                     byteBuf = null;
                 } while (allocHandle.continueReading());
 

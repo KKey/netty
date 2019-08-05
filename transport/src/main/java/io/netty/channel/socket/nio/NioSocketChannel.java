@@ -101,6 +101,13 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
      * @param socket    the {@link SocketChannel} which will be used
      */
     public NioSocketChannel(Channel parent, SocketChannel socket) {
+        /**
+         * KKEY 分析的channel一样，只是IO监听位配置成了READ
+         * 例如：设置IO监听位、设置非阻塞、创建unsafe、初始化pipeline、初始化handler链表等
+         * unsafe:NioSocketChannelUnsafe
+         * pipeline:DefaultChannelPipeline
+         * 此时设置的parent为NioSeverSocketChannel
+         */
         super(parent, socket);
         config = new NioSocketChannelConfig(this, socket.socket());
     }

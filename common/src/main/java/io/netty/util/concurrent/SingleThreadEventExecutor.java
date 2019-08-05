@@ -286,12 +286,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         long nanoTime = AbstractScheduledEventExecutor.nanoTime();
         Runnable scheduledTask  = pollScheduledTask(nanoTime);
         while (scheduledTask != null) {
-            if (!taskQueue.offer(scheduledTask)) {
+            if (!taskQueue.offer(scheduledTask)) {//添加到task队列中
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
+                //添加task队列失败，重新添加的定时队列中
                 scheduledTaskQueue().add((ScheduledFutureTask<?>) scheduledTask);
                 return false;
             }
-            scheduledTask  = pollScheduledTask(nanoTime);
+            scheduledTask  = pollScheduledTask(nanoTime);//KKEY 循环从定时队列中获取，直到将超时任务都添加到task队列中
         }
         return true;
     }
@@ -363,11 +364,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         boolean ranAtLeastOne = false;
 
         do {
+            //KKEY 循环从定时队列中取出已经超时需要执行的任务并添加的task任务队列中，从scheduledTaskQueue中取任务到taskQueue进行执行
             fetchedAll = fetchFromScheduledTaskQueue();
             if (runAllTasksFrom(taskQueue)) {
                 ranAtLeastOne = true;
             }
-        } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
+        } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.// 直到取出所有超时定时任务
 
         if (ranAtLeastOne) {
             lastExecutionTime = ScheduledFutureTask.nanoTime();
@@ -389,7 +391,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             return false;
         }
         for (;;) {
-            safeExecute(task);
+            safeExecute(task);//KKEY 执行task,task.run();
             task = pollTaskFrom(taskQueue);
             if (task == null) {
                 return true;

@@ -244,15 +244,19 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             final Channel child = (Channel) msg;
 
+            //KKEY 将启动是指定的子channel handler添加到pipeline
             child.pipeline().addLast(childHandler);
 
+            //设置TCP等参数
             setChannelOptions(child, childOptions, logger);
 
             for (Entry<AttributeKey<?>, Object> e: childAttrs) {
+                //设置参数
                 child.attr((AttributeKey<Object>) e.getKey()).set(e.getValue());
             }
 
             try {
+                //KKEY 注册到childGroup中，注意这里是childGroup，parent注册的是parentGroup
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
