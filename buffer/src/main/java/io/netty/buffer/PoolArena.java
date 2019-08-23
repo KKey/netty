@@ -42,10 +42,17 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 
     final PooledByteBufAllocator parent;
 
+    /*
+        KKEY 内存池内存分配规则
+        对于小于PageSize大小的内存分配，会在tinySubPagePools和smallSubPagePools中分配，
+            tinySubPagePools用来分配小于512字节的内存，smallSubPagePools用来分配大于512字节小于PageSize的内存；
+        对于大于PageSize小于ChunkSize的内存分配，会在PoolChunkList中的Chunk中分配
+        对于大于ChunkSize的内存分配，会之间直接创建非池化的Chunk来分配，并且该Chunk不会放在内存池中重用。
+     */
     private final int maxOrder;
-    final int pageSize;
+    final int pageSize;//默认8K
+    final int chunkSize;//默认2048个pageSize，16M，normal大小的内存在8K~16M之间
     final int pageShifts;
-    final int chunkSize;
     final int subpageOverflowMask;
     final int numSmallSubpagePools;
     final int directMemoryCacheAlignment;
@@ -143,8 +150,8 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     abstract boolean isDirect();
 
     PooledByteBuf<T> allocate(PoolThreadCache cache, int reqCapacity, int maxCapacity) {
-        PooledByteBuf<T> buf = newByteBuf(maxCapacity);
-        allocate(cache, buf, reqCapacity);
+        PooledByteBuf<T> buf = newByteBuf(maxCapacity);//KKEY 分配bytebuf对象，从 RECYCLER 对象缓存中获取缓存对象，并重置对象
+        allocate(cache, buf, reqCapacity);//Arena内存块中分配内存
         return buf;
     }
 
@@ -174,18 +181,20 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 
     private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
         final int normCapacity = normalizeCapacity(reqCapacity);
+        //KKEY 小于pageSize，判断需要分配的内存大小是否大于PageSize，如果小于PageSize则分配tiny内存或者small内存
         if (isTinyOrSmall(normCapacity)) { // capacity < pageSize
             int tableIdx;
             PoolSubpage<T>[] table;
             boolean tiny = isTiny(normCapacity);
-            if (tiny) { // < 512
+            //KKEY 1~512 ==>> tiny， 512~8K ==>> small
+            if (tiny) { // < 512 tiny
                 if (cache.allocateTiny(this, buf, reqCapacity, normCapacity)) {
                     // was able to allocate out of the cache so move on
                     return;
                 }
                 tableIdx = tinyIdx(normCapacity);
                 table = tinySubpagePools;
-            } else {
+            } else { // small
                 if (cache.allocateSmall(this, buf, reqCapacity, normCapacity)) {
                     // was able to allocate out of the cache so move on
                     return;
@@ -211,6 +220,11 @@ abstract class PoolArena<T> implements PoolArenaMetric {
                     return;
                 }
             }
+            /*
+                内存池的初始阶段，线程是没有内存缓存的，所以最开始的内存分配都需要在Chunk分配区进行分配；
+                也就是说无论是tinySubpagePools还是smallSubpagePools成员，在内存池初始化时是不会预置内存的，
+                所以最开始的内存分配都会进入PoolArena的allocateNormal方法
+             */
             synchronized (this) {
                 allocateNormal(buf, reqCapacity, normCapacity);
             }
@@ -219,6 +233,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             return;
         }
         if (normCapacity <= chunkSize) {
+            //KKEY   pageSize < 分配 <= chunkSize，归属于normal
             if (cache.allocateNormal(this, buf, reqCapacity, normCapacity)) {
                 // was able to allocate out of the cache so move on
                 return;
@@ -229,6 +244,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             }
         } else {
             // Huge allocations are never served via the cache so just call allocateHuge
+            //KKEY 大于chunk 大小的内存，不支持在内存池中分配，也不支持内存池中重复回收。需要JVM分配则调用allocateHuge()方法在池外进行分配；
             allocateHuge(buf, reqCapacity);
         }
     }
@@ -241,7 +257,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             return;
         }
 
-        // Add a new chunk.
+        // Add a new chunk. 产生一个新的chunk对象
         PoolChunk<T> c = newChunk(pageSize, maxOrder, pageShifts, chunkSize);
         boolean success = c.allocate(buf, reqCapacity, normCapacity);
         assert success;
@@ -335,9 +351,10 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     }
 
     int normalizeCapacity(int reqCapacity) {
-        checkPositiveOrZero(reqCapacity, "reqCapacity");
+        checkPositiveOrZero(reqCapacity, "reqCapacity");//请求分配容量的大小合法性校验
 
         if (reqCapacity >= chunkSize) {
+            //KKEY 大于chunk 大小的内存，不支持在内存池中分配，也不支持内存池中重复回收。
             return directMemoryCacheAlignment == 0 ? reqCapacity : alignCapacity(reqCapacity);
         }
 

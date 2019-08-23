@@ -32,7 +32,7 @@ class PooledHeapByteBuf extends PooledByteBuf<byte[]> {
     };
 
     static PooledHeapByteBuf newInstance(int maxCapacity) {
-        PooledHeapByteBuf buf = RECYCLER.get();
+        PooledHeapByteBuf buf = RECYCLER.get();//KKEY
         buf.reuse(maxCapacity);
         return buf;
     }

@@ -29,7 +29,7 @@ final class PooledUnsafeHeapByteBuf extends PooledHeapByteBuf {
     };
 
     static PooledUnsafeHeapByteBuf newUnsafeInstance(int maxCapacity) {
-        PooledUnsafeHeapByteBuf buf = RECYCLER.get();
+        PooledUnsafeHeapByteBuf buf = RECYCLER.get();//KKEY
         buf.reuse(maxCapacity);
         return buf;
     }
