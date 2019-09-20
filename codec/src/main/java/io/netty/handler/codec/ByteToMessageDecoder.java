@@ -15,8 +15,6 @@
  */
 package io.netty.handler.codec;
 
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
@@ -27,6 +25,8 @@ import io.netty.channel.socket.ChannelInputShutdownEvent;
 import io.netty.util.internal.StringUtil;
 
 import java.util.List;
+
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
  * {@link ChannelInboundHandlerAdapter} which decodes bytes in a stream-like fashion from one {@link ByteBuf} to an
@@ -75,12 +75,20 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      * Cumulate {@link ByteBuf}s by merge them into one {@link ByteBuf}'s, using memory copies.
      */
     public static final Cumulator MERGE_CUMULATOR = new Cumulator() {
+        /**
+         * 当前消息的内容和缓存不足一个包的内容进行拼接
+         * @param alloc byteBuf分配器
+         * @param cumulation 缓存消息的byteBuf
+         * @param in 当前数据的byteBuf
+         * @return 拼接组合过的byteBuf
+         */
         @Override
         public ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in) {
             try {
                 final ByteBuf buffer;
                 if (cumulation.writerIndex() > cumulation.maxCapacity() - in.readableBytes()
                     || cumulation.refCnt() > 1 || cumulation.isReadOnly()) {
+                    //KKEY 当前缓存的byteBuf空间不足以容下新进来的消息，则需要扩容等
                     // Expand cumulation (by replace it) when either there is not more room in the buffer
                     // or if the refCnt is greater then 1 which may happen when the user use slice().retain() or
                     // duplicate().retain() or if its read-only.
@@ -92,7 +100,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                 } else {
                     buffer = cumulation;
                 }
-                buffer.writeBytes(in);
+                buffer.writeBytes(in);//将当前新进来的消息写到拼接ByteBuf中
                 return buffer;
             } finally {
                 // We must release in in all cases as otherwise it may produce a leak if writeBytes(...) throw
@@ -266,13 +274,15 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
         if (msg instanceof ByteBuf) {
             CodecOutputList out = CodecOutputList.newInstance();
             try {
-                ByteBuf data = (ByteBuf) msg;
+                ByteBuf data = (ByteBuf) msg;//当前消息内容
                 first = cumulation == null;
                 if (first) {
-                    cumulation = data;
+                    cumulation = data;//如果还没有缓存待拆包内容，则缓存当前消息内容
                 } else {
+                    //已经有待拆包内容则对当前消息进行累计到缓存容器中
                     cumulation = cumulator.cumulate(ctx.alloc(), cumulation, data);
                 }
+                //触发解包
                 callDecode(ctx, cumulation, out);
             } catch (DecoderException e) {
                 throw e;
@@ -281,9 +291,11 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
             } finally {
                 if (cumulation != null && !cumulation.isReadable()) {
                     numReads = 0;
-                    cumulation.release();
+                    cumulation.release();//KKEY 全部解码完，本地不需要在缓存，则释放置空
                     cumulation = null;
                 } else if (++ numReads >= discardAfterReads) {
+                    // 为防止发送端发送数据过快ByteToMessageDecoder.channelRead中在每次拆包过后都会做一次判断，
+                    // 如果读取到的数据量过多也会主动执行本地字节容器的清理逻辑
                     // We did enough reads already try to discard some bytes so we not risk to see a OOME.
                     // See https://github.com/netty/netty/issues/4275
                     numReads = 0;
@@ -292,6 +304,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
 
                 int size = out.size();
                 decodeWasNull = !out.insertSinceRecycled();
+                //KKEY 解码、拆包完成之后触发channel read 将业务包传递给channelPipeline进行后续handler链处理
                 fireChannelRead(ctx, out, size);
                 out.recycle();
             }
@@ -413,7 +426,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      *
      * @param ctx           the {@link ChannelHandlerContext} which this {@link ByteToMessageDecoder} belongs to
      * @param in            the {@link ByteBuf} from which to read data
-     * @param out           the {@link List} to which decoded messages should be added
+     * @param out           the {@link List} to which decoded messages should be added 业务数据包缓存容器
      */
     protected void callDecode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         try {
@@ -435,8 +448,8 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                     outSize = 0;
                 }
 
-                int oldInputLength = in.readableBytes();
-                decodeRemovalReentryProtection(ctx, in, out);
+                int oldInputLength = in.readableBytes();//当前缓存容器的总可读大小
+                decodeRemovalReentryProtection(ctx, in, out);//KKEY 实际解包
 
                 // Check if this handler was removed before continuing the loop.
                 // If it was removed, it is not safe to continue to operate on the buffer.
@@ -448,8 +461,10 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
 
                 if (outSize == out.size()) {
                     if (oldInputLength == in.readableBytes()) {
+                        //啥数据都没有解码到，不足解码出一个包，可能数据还不够业务拆包器处理，直接break等待新的数据；
                         break;
                     } else {
+                        //若拆包器已读取部分数据，说明解码器仍然在工作，继续循环解码
                         continue;
                     }
                 }
@@ -522,10 +537,17 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
         }
     }
 
-    static ByteBuf expandCumulation(ByteBufAllocator alloc, ByteBuf cumulation, int readable) {
+    /**
+     * 重新分配一个足够容量的ByteBuf，将老ByteBuf的内容写进去，并将老缓存的ByteBuf释放
+     * @param alloc 分配器
+     * @param cumulation 缓存的byteBuf
+     * @param readable 新进来消息可读取的总大小
+     * @return 新ByteBuf
+     */
+    private static ByteBuf expandCumulation(ByteBufAllocator alloc, ByteBuf cumulation, int readable) {
         ByteBuf oldCumulation = cumulation;
-        cumulation = alloc.buffer(oldCumulation.readableBytes() + readable);
-        cumulation.writeBytes(oldCumulation);
+        cumulation = alloc.buffer(oldCumulation.readableBytes() + readable);//重新分配足够大小的ByteBuf
+        cumulation.writeBytes(oldCumulation);//写入原始缓存数据
         oldCumulation.release();
         return cumulation;
     }

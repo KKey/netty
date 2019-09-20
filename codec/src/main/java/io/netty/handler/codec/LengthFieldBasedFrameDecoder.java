@@ -15,15 +15,15 @@
  */
 package io.netty.handler.codec;
 
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.serialization.ObjectDecoder;
 
 import java.nio.ByteOrder;
 import java.util.List;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.serialization.ObjectDecoder;
+import static io.netty.util.internal.ObjectUtil.checkPositive;
+import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 /**
  * A decoder that splits the received {@link ByteBuf}s dynamically by the
@@ -183,8 +183,16 @@ import io.netty.handler.codec.serialization.ObjectDecoder;
  * +------+--------+------+----------------+      +------+----------------+
  * </pre>
  * @see LengthFieldPrepender
+ * KKEY 基于长度字段的解码器
  */
 public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
+
+    /*
+     * +------+--------+------+----------------+
+     * | HDR1 | Length | HDR2 | Actual Content |
+     * | 0xCA | 0x0010 | 0xFE | "HELLO, WORLD" |
+     * +------+--------+------+----------------+
+     */
 
     private final ByteOrder byteOrder;
     private final int maxFrameLength;
@@ -276,21 +284,21 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
     /**
      * Creates a new instance.
      *
-     * @param byteOrder
+     * @param byteOrder 字节序
      *        the {@link ByteOrder} of the length field
-     * @param maxFrameLength
+     * @param maxFrameLength 包体最大长度限制
      *        the maximum length of the frame.  If the length of the frame is
      *        greater than this value, {@link TooLongFrameException} will be
      *        thrown.
-     * @param lengthFieldOffset
+     * @param lengthFieldOffset 长度字段的前置偏移量
      *        the offset of the length field
-     * @param lengthFieldLength
+     * @param lengthFieldLength 长度字段的长度
      *        the length of the length field
      * @param lengthAdjustment
      *        the compensation value to add to the value of the length field
      * @param initialBytesToStrip
      *        the number of first bytes to strip out from the decoded frame
-     * @param failFast
+     * @param failFast 是否快速失败标志
      *        If <tt>true</tt>, a {@link TooLongFrameException} is thrown as
      *        soon as the decoder notices the length of the frame will exceed
      *        <tt>maxFrameLength</tt> regardless of whether the entire frame
@@ -331,9 +339,9 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
 
     @Override
     protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        Object decoded = decode(ctx, in);
+        Object decoded = decode(ctx, in);//实际解码
         if (decoded != null) {
-            out.add(decoded);
+            out.add(decoded);//KKEY 将解码对象添加到输出容器中
         }
     }
 
