@@ -15,12 +15,12 @@
  */
 package io.netty.handler.codec;
 
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.util.List;
+
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
  * A decoder that splits the received {@link ByteBuf}s by one or more
@@ -59,10 +59,10 @@ import java.util.List;
  */
 public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
 
-    private final ByteBuf[] delimiters;
-    private final int maxFrameLength;
-    private final boolean stripDelimiter;
-    private final boolean failFast;
+    private final ByteBuf[] delimiters;//多个多种分隔符
+    private final int maxFrameLength;//最大包大小
+    private final boolean stripDelimiter;//是否跳过分隔符标志
+    private final boolean failFast;//failFast 为true是说发现读到的数据已经超过了maxFrameLength了，立即报TooLongFrameException，如果为false就是读完整个帧数据后再报
     private boolean discardingTooLongFrame;
     private int tooLongFrameLength;
     /** Set only when decoding with "\n" and "\r\n" as the delimiter.  */
@@ -236,6 +236,7 @@ public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
         // Try all delimiters and choose the delimiter which yields the shortest frame.
         int minFrameLength = Integer.MAX_VALUE;
         ByteBuf minDelim = null;
+        //多个分隔符进行循环处理
         for (ByteBuf delim: delimiters) {
             int frameLength = indexOf(buffer, delim);
             if (frameLength >= 0 && frameLength < minFrameLength) {
@@ -313,8 +314,12 @@ public class DelimiterBasedFrameDecoder extends ByteToMessageDecoder {
      * Returns the number of bytes between the readerIndex of the haystack and
      * the first needle found in the haystack.  -1 is returned if no needle is
      * found in the haystack.
+     * @param haystack 当前需要拆包的消息
+     * @param needle 分隔符
+     * @return 返回索引到第一个分隔符的位置，没有则-1
      */
     private static int indexOf(ByteBuf haystack, ByteBuf needle) {
+        //在可读区域进行索引查找
         for (int i = haystack.readerIndex(); i < haystack.writerIndex(); i ++) {
             int haystackIndex = i;
             int needleIndex;

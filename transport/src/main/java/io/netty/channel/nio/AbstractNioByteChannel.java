@@ -152,7 +152,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             try {
                 do {
                     byteBuf = allocHandle.allocate(allocator);//KKEY:这个需要重点分析 分配器分配byteBuf AdaptiveRecvByteBufAllocator
-                    allocHandle.lastBytesRead(doReadBytes(byteBuf));//从channel读到byteBuf
+                    allocHandle.lastBytesRead(doReadBytes(byteBuf));//KKEY 从channel读到byteBuf
                     if (allocHandle.lastBytesRead() <= 0) {
                         // nothing was read. release the buffer.
                         byteBuf.release();//啥都没读到，释放吧
